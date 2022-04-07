@@ -1,0 +1,18 @@
+%ifndef __PRINT_MAC__
+%define __PRINT_MAC__
+
+
+
+%macro ISR 1
+global _isr%1
+
+_isr%1:
+    mov eax, %1
+    push eax
+    call imprimir_excepcion
+    add esp, 4
+    jmp $
+
+%endmacro
+
+%endif

@@ -1,0 +1,170 @@
+
+; ** por compatibilidad se omiten tildes **
+; ==============================================================================
+; TRABAJO PRACTICO 3 - System Programming - ORGANIZACION DE COMPUTADOR II - FCEN
+; ==============================================================================
+
+
+%ifndef __PRINT_MAC__
+%define __PRINT_MAC__
+
+%macro pintarPantalla 0
+    ;mapa verde
+    print_text_pm pantallaVacia, pantLength2, 0x20, 1, 0
+    
+    ; 1er jugador rojo
+    print_text_pm amalin, amalinLength, 0x04, 42, 10 
+    ; 2do jugador azul 
+    print_text_pm betarote, betaroteLength, 0x01, 42, 40
+    ;puntaje rojo
+    print_text_pm pantallaVacia, ancho_panel_puntaje, 0x4F, 44, 10 
+    print_text_pm puntajeRojo, ancho_panel_puntaje, 0x4F, 45, 10 
+    print_text_pm pantallaVacia, ancho_panel_puntaje, 0x4F, 46, 10 
+    
+    ;puntaje azul
+    print_text_pm pantallaVacia, ancho_panel_puntaje, 0x1F, 44, 60
+    print_text_pm puntajeAzul, ancho_panel_puntaje, 0x1F, 45, 60
+    print_text_pm pantallaVacia, ancho_panel_puntaje, 0x1F, 46, 60
+%endmacro
+;; print_text_pm:
+;;  Description:
+;;      Imprime un string en la seccion especificada de la memoria de Video.
+;;
+;;  Parametros:
+;;      %1: Puntero al mensaje
+;;      %2: Longitud del mensaje
+;;      %3: Color
+;;      %4: Fila
+;;      %5: Columna
+;;
+;;  Color:
+;;      * Bit #: 7 6 5 4 3 2 1 0
+;;               | | | | | | | |
+;;               | | | | | ^-^-^-- Fore color
+;;               | | | | ^-------- Fore color bright bit
+;;               | ^-^-^---------- Back color
+;;               ^---------------- Back color bright bit OR enables blinking text
+;;
+;;  Nota:
+;;      * Solo funciona en MODO PROTEGIDO.
+;;      * TODOS los parámetros son de 32 BITS.
+;;
+
+%define GDT_OFFSET_DS_RING_0_VIDEO 96 ;8<<3
+
+%macro print_text_pm 5
+    pushad
+
+    push %3             ; %3 = color
+    push %2             ; %2 = longitud del mensaje
+    push %1             ; %1 = puntero al mensaje
+    push %5             ; %5 = columna
+    push %4             ; %4 = fila
+
+    ; Calcular offset para imprimir en pantalla
+    ; offset = fila * 80 + columna
+    pop eax             ; eax = fila
+    mov ebx, 80
+    imul ebx            ; eax = fila * 80
+    pop ebx             ; ebx = columna
+    add eax, ebx        ; eax = fila * 80 + columna
+
+    ; Establecer el puntero al buffer de pantalla en (fila, columna)
+    mov ebx, 0x0    ; ebx = puntero a la base del buffer de video
+    shl eax, 1          ; Cada posicion de la memoria de video ocupa un word
+    add ebx, eax        ; ebx = puntero a la posicion (fila, columna)
+
+    ; Cargar mensaje, longitud y color
+    pop edi             ; edi = puntero al mensaje
+    pop ecx             ; ecx = longitud del mensaje
+    pop eax             ; eax = color
+
+    ; Acomodar color en la parte alta de ax
+    shl ax, 8           ; ah = color
+
+    ;utilizamos el selector de segmento de video para pintar la pantalla
+    mov dx,GDT_OFFSET_DS_RING_0_VIDEO
+    mov gs,dx   ;rpl=0, TI=0
+
+    ; Imprimir cadena
+    %%ciclo_cadena:
+        mov     al, [edi]       ; al = caracter
+        mov     [gs:ebx], ax       ; Escribir en pantalla
+        add     ebx, 2          ; Avanzar el puntero de la memoria de video
+        inc     edi             ; Avanzar el puntero de la cadena
+        loop    %%ciclo_cadena
+
+    popad
+%endmacro
+
+;; print_text_rm:
+;;  Description:
+;;      Imprime un string en la seccion especificada de la memoria de Video.
+;;
+;;  Parametros:
+;;      %1: Puntero al mensaje
+;;      %2: Longitud del mensaje
+;;      %3: Color
+;;      %4: Fila
+;;      %5: Columna
+;;
+;;  Color:
+;;      * Bit #: 7 6 5 4 3 2 1 0
+;;               | | | | | | | |
+;;               | | | | | ^-^-^-- Fore color
+;;               | | | | ^-------- Fore color bright bit
+;;               | ^-^-^---------- Back color
+;;               ^---------------- Back color bright bit OR enables blinking text
+;;
+;;  Nota:
+;;      * Solo funciona en MODO REAL.
+;;      * TODOS los parámetros son de 16 BITS.
+;;
+%macro print_text_rm 5
+    pusha
+
+    push es
+
+    push %3             ; %3 = color
+    push %2             ; %2 = longitud del mensaje
+    push %1             ; %1 = puntero al mensaje
+    push %5             ; %5 = columna
+    push %4             ; %4 = fila
+
+    ; Calcular offset para imprimir en pantalla
+    ; offset = fila * 80 + columna
+    pop ax              ; eax = fila
+    mov bx, 80
+    imul bx             ; eax = fila * 80
+    pop bx              ; ebx = columna
+    add ax, bx          ; eax = fila * 80 + columna
+
+    ; Establecer puntero a la base de la memoria de video
+    mov ax, 0xb800      ; es = segmento de video
+    mov es, ax
+
+    ; Establecer offset al buffer de pantalla en (fila, columna)
+    shl ax, 1           ; Cada posicion de la memoria de video ocupa un word
+
+    ; Cargar mensaje, longitud y color
+    pop di              ; edi = puntero al mensaje
+    pop cx              ; ecx = longitud del mensaje
+    pop ax              ; eax = color
+
+    ; Acomodar color en la parte alta de ax
+    shl ax, 8           ; ah = color
+
+    ; Imprimir cadena
+    %%ciclo_cadena:
+        mov     al, [di]        ; al = caracter
+        mov     [es:bx], ax     ; Escribir en pantalla
+        add     bx, 2           ; Avanzar el puntero de la memoria de video
+        inc     di              ; Avanzar el puntero de la cadena
+        loop    %%ciclo_cadena
+
+    pop es
+
+    popa
+%endmacro
+
+%endif  ;; !__PRINT_MAC__ ;;
